@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
 # 1. Render port xatoligini oldini olish uchun kichik web-server (Flask)
-web_app = Flask(__name__)
+web_app = Flask(__Dr.Ali__)
 
 @web_app.route('/')
 def home():
@@ -24,7 +24,7 @@ client = Groq(api_key=GROQ_KEY)
 
 # 3. Telegram bot komandalari va muloqot mantiqi
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salom! Men Sun'iy Intellekt yordamchisiman. Savolingizni yozing 🤖")
+    await update.message.reply_text("Assalomu aleykum! Men Dr.Ali sizg qiziq sovolaringiz bölsa jovob berishdan manmunman 🤖")
 
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
@@ -44,7 +44,7 @@ async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Kechirasiz, javob tayyorlashda xatolik yuz berdi.")
 
 # 4. Asosiy ishga tushirish qismi
-if __name__ == "__main__":
+if __Dr.Ali__ == "__main__":
     # Web serverni arqa fonda (thread) ishga tushiramiz
     threading.Thread(target=run_flask, daemon=True).start()
     
