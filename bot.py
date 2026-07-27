@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
 TELEGRAM_TOKEN = "8847168101:AAGVWvBSRExuyDNgenww6dQpy4q-dOKjgD4"
-GROQ_KEY = "BU_YERGA_GROQ_KEYNI_YOZING"
+GROQ_KEY = GROQ_KEY = "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"
 
 client = (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)
 
