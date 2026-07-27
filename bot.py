@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, fil
 TELEGRAM_TOKEN = "8847168101:AAGVWvBSRExuyDNgenww6dQpy4q-dOKjgD4"
 GROQ_KEY = GROQ_KEY = "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"
 
-client = (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)
+client = "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"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salom! Savolingizni yozing 🤖")
