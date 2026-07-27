@@ -1,6 +1,7 @@
 import os
 import json
 import sqlite3
+import asyncio
 import threading
 from datetime import datetime
 from flask import Flask
@@ -25,7 +26,7 @@ GROQ_KEY = os.environ.get("GROQ_KEY", "gsk_NPnU3oOIrD5Hxd8wm55QWGdyb3FY8oDGh0pDl
 
 client = Groq(api_key=GROQ_KEY)
 
-# DB ulash (sana va vaqt ustuni bilan)
+# DB ulash
 def init_db():
     conn = sqlite3.connect("finance.db")
     cursor = conn.cursor()
@@ -33,10 +34,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            type TEXT, -- 'income' yoki 'expense'
+            type TEXT,
             amount REAL,
             description TEXT,
-            date TEXT -- YYYY-MM-DD HH:MM:SS
+            date TEXT
         )
     """)
     conn.commit()
@@ -97,7 +98,6 @@ def get_report_by_period(user_id, period="month"):
 
     return report
 
-# AI Mantiq: Matn/Ovozdan ma'lumotni va so'ralgan davrni aniqlash
 def process_finance_text(user_id, text):
     prompt = f"""
     Foydalanuvchi matni: "{text}"
@@ -194,7 +194,7 @@ async def report_month_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     report = get_report_by_period(user_id, "month")
     await update.message.reply_text(report, parse_mode="Markdown")
 
-if __name__ == "__main__":
+async def main():
     threading.Thread(target=run_flask, daemon=True).start()
     
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
@@ -206,4 +206,13 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     
     print("Dr.Ali Buxgalter boti ishga tushdi ✅")
-    app.run_polling()
+    
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        # Doimiy ishlashni ta'minlash
+        await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
