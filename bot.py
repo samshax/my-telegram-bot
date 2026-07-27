@@ -1,7 +1,8 @@
 import os
+import json
 import sqlite3
 import threading
-import requests
+from datetime import datetime
 from flask import Flask
 from groq import Groq
 from telegram import Update
@@ -12,7 +13,7 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "Dr.Ali Buxgalteriya Boti Ishlamoqda!"
+    return "Dr.Ali Buxgalteriya Boti 24/7 Ishlamoqda!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -24,7 +25,7 @@ GROQ_KEY = os.environ.get("GROQ_KEY", "gsk_NPnU3oOIrD5Hxd8wm55QWGdyb3FY8oDGh0pDl
 
 client = Groq(api_key=GROQ_KEY)
 
-# DB ulash va jadval yaratish
+# DB ulash (sana va vaqt ustuni bilan)
 def init_db():
     conn = sqlite3.connect("finance.db")
     cursor = conn.cursor()
@@ -34,7 +35,8 @@ def init_db():
             user_id INTEGER,
             type TEXT, -- 'income' yoki 'expense'
             amount REAL,
-            description TEXT
+            description TEXT,
+            date TEXT -- YYYY-MM-DD HH:MM:SS
         )
     """)
     conn.commit()
@@ -45,64 +47,73 @@ init_db()
 def add_transaction(user_id, trans_type, amount, description):
     conn = sqlite3.connect("finance.db")
     cursor = conn.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cursor.execute(
-        "INSERT INTO transactions (user_id, type, amount, description) VALUES (?, ?, ?, ?)",
-        (user_id, trans_type, amount, description)
+        "INSERT INTO transactions (user_id, type, amount, description, date) VALUES (?, ?, ?, ?, ?)",
+        (user_id, trans_type, amount, description, now_str)
     )
     conn.commit()
     conn.close()
 
-def get_report(user_id):
+def get_report_by_period(user_id, period="month"):
     conn = sqlite3.connect("finance.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT type, amount, description FROM transactions WHERE user_id = ?", (user_id,))
+    
+    if period == "today":
+        filter_date = datetime.now().strftime("%Y-%m-%d")
+        cursor.execute("SELECT type, amount, description, date FROM transactions WHERE user_id = ? AND date LIKE ?", (user_id, f"{filter_date}%"))
+        title = "📅 **BUGUNGI HISOBOT:**"
+    elif period == "month":
+        filter_date = datetime.now().strftime("%Y-%m")
+        cursor.execute("SELECT type, amount, description, date FROM transactions WHERE user_id = ? AND date LIKE ?", (user_id, f"{filter_date}%"))
+        title = "🗓 **SHU OYLIK (30 KUNLIK) HISOBOT:**"
+    else:  # all_time
+        cursor.execute("SELECT type, amount, description, date FROM transactions WHERE user_id = ?", (user_id,))
+        title = "📊 **UMUMIY (BARCHA VAQT BO'YICHA) HISOBOT:**"
+
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        return "Kun davomida hech qanday kirim yoki chiqim yozilmadi."
+        return f"{title}\n\nUshbu davr bo'yicha hech qanday ma'lumot topilmadi."
 
     total_income = 0
     total_expense = 0
-    details = "📊 **KUNLIK HISOBOT:**\n\n"
-
-    for r_type, amount, desc in rows:
+    
+    for r_type, amount, desc, t_date in rows:
         if r_type == 'income':
             total_income += amount
-            details += f"🟢 +{amount:,.0f} so'm ({desc})\n"
         else:
             total_expense += amount
-            details += f"🔴 -{amount:,.0f} so'm ({desc})\n"
 
     balance = total_income - total_expense
-    details += f"\n---------------------------\n"
-    details += f"💰 **Jami Daromad:** {total_income:,.0f} so'm\n"
-    details += f"💸 **Jami Xarajat:** {total_expense:,.0f} so'm\n"
-    details += f"⚖️ **Qoldiq Balans:** {balance:,.0f} so'm"
+    
+    report = f"{title}\n\n"
+    report += f"🟢 **Jami Tushum (Foyda/Kirim):** {total_income:,.0f} so'm\n"
+    report += f"🔴 **Jami Xarajat (Chiqim):** {total_expense:,.0f} so'm\n"
+    report += f"---------------------------\n"
+    report += f"⚖️ **Sof Qoldiq (Balans):** {balance:,.0f} so'm\n"
+    report += f"📝 **Operatsiyalar soni:** {len(rows)} ta"
 
-    return details
+    return report
 
-def clear_data(user_id):
-    conn = sqlite3.connect("finance.db")
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-    conn.commit()
-    conn.close()
-
-# AI Mantiq: Matndan raqam va amalni ajratish
+# AI Mantiq: Matn/Ovozdan ma'lumotni va so'ralgan davrni aniqlash
 def process_finance_text(user_id, text):
     prompt = f"""
     Foydalanuvchi matni: "{text}"
-    Sening vazifang ushbu matndan moliyaviy ma'lumotni ajratib olish.
-    Javobni FAQAT quyidagi JSON formatida qaytar, ortiqcha hech narsa yozma:
+    Sening vazifang matndan moliyaviy ma'lumotni yoki hisobot so'rovini aniqlash.
+    Javobni FAQAT quyidagi JSON formatida qaytar:
     {{
+        "is_report_request": true/false,
+        "period": "today" yoki "month" yoki "all",
         "is_finance": true/false,
         "type": "income" yoki "expense",
-        "amount": raqam (masalan 50000),
-        "description": "qisqa izoh",
-        "is_report_request": true/false
+        "amount": raqam,
+        "description": "qisqa izoh"
     }}
-    Agar foydalanuvchi hisobot so'rayotgan bo'lsa ("hisobot", "kun oxiri", "natija"), "is_report_request": true qil.
+    Mantiq:
+    - Agar hisobot, foyda, xarajat, oylik natija so'ralgan bo'lsa: "is_report_request": true. Period belgilash: oy/bir oy desa "month", bugun desa "today", hammasi/jami desa "all".
+    - Agar pul kirdi/chiqdi/sarflandi aytilgan bo'lsa: "is_finance": true, type "income" (daromad) yoki "expense" (xarajat).
     """
 
     response = client.chat.completions.create(
@@ -111,12 +122,12 @@ def process_finance_text(user_id, text):
         temperature=0.1
     )
     
-    import json
     try:
         data = json.loads(response.choices[0].message.content.strip())
         
         if data.get("is_report_request"):
-            return get_report(user_id)
+            period = data.get("period", "month")
+            return get_report_by_period(user_id, period)
             
         if data.get("is_finance") and data.get("amount"):
             t_type = data.get("type", "expense")
@@ -125,20 +136,23 @@ def process_finance_text(user_id, text):
             
             add_transaction(user_id, t_type, amount, desc)
             type_str = "Daromad (Kirim) 🟢" if t_type == "income" else "Xarajat (Chiqim) 🔴"
-            return f"✅ Saqlandi!\n📌 **Turi:** {type_str}\n💵 **Summa:** {amount:,.0f} so'm\n📝 **Izoh:** {desc}"
+            return f"✅ Saqlandi!\n📌 **Turi:** {type_str}\n💵 **Summa:** {amount:,.0f} so'm\n📝 **Izoh:** {desc}\n\n*(Barcha ma'lumotlar xotirada doimiy saqlanadi)*"
         else:
-            return "Tushundim, lekin matnda aniq summa ko'rmadim. Masalan: 'Tushlikka 40000 sarfladim' yoki 'Taksi 15000' deb yozing."
+            return "Tushundim. Moliyaviy kirim-chiqim yozing (masalan: 'Tushlik 40000') yoki hisobot so'rang (masalan: 'Shu oylik xarajatlarim')."
     except Exception as e:
-        return "Kechirasiz, ma'lumotni tahlil qilishda xatolik bo'ldi. Iltimos, qayta urinib ko'ring."
+        return "Xatolik yuz berdi, qaytadan urinib ko'ring."
 
 # Telegram Handlerlar
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Assalomu alaykum! Men sizning shaxsiy buxgalteringiz Dr.Ali man.\n\n"
-        "Siz menga matnli yoki OVOZLI xabar yuborishingiz mumkin (Masalan: 'Bugun 100 mingga benzin quydim' yoki 'Mijozdan 500 bin sum tushdi').\n\n"
-        "📌 Buyruqlar:\n"
-        "/hisobot - Kunlik hisobotni olish\n"
-        "/tozalash - Kunlik hisoblarni nolga tushirish"
+        "Assalomu alaykum! Men Dr.Ali — sizning doimiy shaxsiy buxgalteringizman.\n\n"
+        "Men barcha xarajat va foydalaringizni **hech qachon o'chirmasdan** xotirada saqlab boraman.\n\n"
+        "💡 **Menga qanday yozishingiz mumkin:**\n"
+        "• 'Bugun benzinga 120 ming berdim'\n"
+        "• 'Mijozdan 2 mln tushdi'\n"
+        "• 'Shu oylik hisobotni ber'\n"
+        "• 'Bir oydan beri qancha foyda qildim?'\n"
+        "• Ovozli xabar (voice) yuborishingiz ham mumkin!"
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,18 +187,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_path)
 
     except Exception as e:
-        print(f"Ovoz xatosi: {e}")
         await update.message.reply_text("Ovozni tanib olishda xatolik bo'ldi.")
 
-async def handle_report_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def report_month_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    report = get_report(user_id)
+    report = get_report_by_period(user_id, "month")
     await update.message.reply_text(report, parse_mode="Markdown")
-
-async def handle_clear_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    clear_data(user_id)
-    await update.message.reply_text("🧹 Barcha hisob-kitoblar tozalandi! Yangi kunni 0 dan boshlashingiz mumkin.")
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
@@ -192,8 +200,7 @@ if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("hisobot", handle_report_cmd))
-    app.add_handler(CommandHandler("tozalash", handle_clear_cmd))
+    app.add_handler(CommandHandler("hisobot", report_month_cmd))
     
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
