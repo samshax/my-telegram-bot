@@ -1,7 +1,6 @@
 import os
 import json
 import sqlite3
-import asyncio
 import threading
 from datetime import datetime
 from flask import Flask
@@ -9,12 +8,12 @@ from groq import Groq
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 
-# Render uchun Flask keep-alive
+# Render portini ushlab turish uchun Flask server
 web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "Dr.Ali Buxgalteriya Boti 24/7 Ishlamoqda!"
+    return "Dr.Ali Buxgalteriya Boti Ishlamoqda!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -26,7 +25,7 @@ GROQ_KEY = os.environ.get("GROQ_KEY", "gsk_NPnU3oOIrD5Hxd8wm55QWGdyb3FY8oDGh0pDl
 
 client = Groq(api_key=GROQ_KEY)
 
-# DB ulash
+# Bazani yaratish
 def init_db():
     conn = sqlite3.connect("finance.db")
     cursor = conn.cursor()
@@ -67,10 +66,10 @@ def get_report_by_period(user_id, period="month"):
     elif period == "month":
         filter_date = datetime.now().strftime("%Y-%m")
         cursor.execute("SELECT type, amount, description, date FROM transactions WHERE user_id = ? AND date LIKE ?", (user_id, f"{filter_date}%"))
-        title = "🗓 **SHU OYLIK (30 KUNLIK) HISOBOT:**"
-    else:  # all_time
+        title = "🗓 **SHU OYLIK HISOBOT:**"
+    else:
         cursor.execute("SELECT type, amount, description, date FROM transactions WHERE user_id = ?", (user_id,))
-        title = "📊 **UMUMIY (BARCHA VAQT BO'YICHA) HISOBOT:**"
+        title = "📊 **UMUMIY HISOBOT:**"
 
     rows = cursor.fetchall()
     conn.close()
@@ -90,11 +89,11 @@ def get_report_by_period(user_id, period="month"):
     balance = total_income - total_expense
     
     report = f"{title}\n\n"
-    report += f"🟢 **Jami Tushum (Foyda/Kirim):** {total_income:,.0f} so'm\n"
-    report += f"🔴 **Jami Xarajat (Chiqim):** {total_expense:,.0f} so'm\n"
+    report += f"🟢 **Jami Tushum:** {total_income:,.0f} so'm\n"
+    report += f"🔴 **Jami Xarajat:** {total_expense:,.0f} so'm\n"
     report += f"---------------------------\n"
-    report += f"⚖️ **Sof Qoldiq (Balans):** {balance:,.0f} so'm\n"
-    report += f"📝 **Operatsiyalar soni:** {len(rows)} ta"
+    report += f"⚖️ **Sof Qoldiq:** {balance:,.0f} so'm\n"
+    report += f"📝 **Operatsiyalar:** {len(rows)} ta"
 
     return report
 
@@ -112,8 +111,8 @@ def process_finance_text(user_id, text):
         "description": "qisqa izoh"
     }}
     Mantiq:
-    - Agar hisobot, foyda, xarajat, oylik natija so'ralgan bo'lsa: "is_report_request": true. Period belgilash: oy/bir oy desa "month", bugun desa "today", hammasi/jami desa "all".
-    - Agar pul kirdi/chiqdi/sarflandi aytilgan bo'lsa: "is_finance": true, type "income" (daromad) yoki "expense" (xarajat).
+    - Agar hisobot, foyda, xarajat so'ralgan bo'lsa: "is_report_request": true. Period: "month", "today" yoki "all".
+    - Agar pul kirdi/chiqdi/sarflandi aytilgan bo'lsa: "is_finance": true, type "income" yoki "expense".
     """
 
     response = client.chat.completions.create(
@@ -136,23 +135,22 @@ def process_finance_text(user_id, text):
             
             add_transaction(user_id, t_type, amount, desc)
             type_str = "Daromad (Kirim) 🟢" if t_type == "income" else "Xarajat (Chiqim) 🔴"
-            return f"✅ Saqlandi!\n📌 **Turi:** {type_str}\n💵 **Summa:** {amount:,.0f} so'm\n📝 **Izoh:** {desc}\n\n*(Barcha ma'lumotlar xotirada doimiy saqlanadi)*"
+            return f"✅ Saqlandi!\n📌 **Turi:** {type_str}\n💵 **Summa:** {amount:,.0f} so'm\n📝 **Izoh:** {desc}"
         else:
-            return "Tushundim. Moliyaviy kirim-chiqim yozing (masalan: 'Tushlik 40000') yoki hisobot so'rang (masalan: 'Shu oylik xarajatlarim')."
+            return "Tushundim. Moliyaviy xarajat yoki daromad kiriting (masalan: 'Tushlik 40000') yoki hisobot so'rang."
     except Exception as e:
         return "Xatolik yuz berdi, qaytadan urinib ko'ring."
 
 # Telegram Handlerlar
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Assalomu alaykum! Men Dr.Ali — sizning doimiy shaxsiy buxgalteringizman.\n\n"
-        "Men barcha xarajat va foydalaringizni **hech qachon o'chirmasdan** xotirada saqlab boraman.\n\n"
-        "💡 **Menga qanday yozishingiz mumkin:**\n"
+        "Assalomu alaykum! Men Dr.Ali — sizning shaxsiy buxgalteringizman.\n\n"
+        "Xarajat va foydalaringizni saqlab boraman.\n\n"
+        "💡 **Misollar:**\n"
         "• 'Bugun benzinga 120 ming berdim'\n"
         "• 'Mijozdan 2 mln tushdi'\n"
         "• 'Shu oylik hisobotni ber'\n"
-        "• 'Bir oydan beri qancha foyda qildim?'\n"
-        "• Ovozli xabar (voice) yuborishingiz ham mumkin!"
+        "• Ovozli xabar ham yuborishingiz mumkin!"
     )
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -194,9 +192,12 @@ async def report_month_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     report = get_report_by_period(user_id, "month")
     await update.message.reply_text(report, parse_mode="Markdown")
 
-async def main():
-    threading.Thread(target=run_flask, daemon=True).start()
+if __name__ == "__main__":
+    # Flask serverni alohida thread'da ishga tushiramiz
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
     
+    # Telegram botni standart usulda ishga tushiramiz
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -206,13 +207,4 @@ async def main():
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     
     print("Dr.Ali Buxgalter boti ishga tushdi ✅")
-    
-    async with app:
-        await app.initialize()
-        await app.start()
-        await app.updater.start_polling()
-        # Doimiy ishlashni ta'minlash
-        await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    app.run_polling(drop_pending_updates=True)
