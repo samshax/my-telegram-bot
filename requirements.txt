@@ -1,3 +1,4 @@
-python-telegram-bot
-groq
-flask
+python-telegram-bot==20.7
+Flask==3.0.0
+groq==0.4.2
+requests==2.31.0
