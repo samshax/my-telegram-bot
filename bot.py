@@ -20,7 +20,7 @@ def run_flask():
     web_app.run(host="0.0.0.0", port=port)
 
 # API Kalitlar
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8847168101:AAGVWvBSRExuyDNgenww6dQpy4q-dOKjgD4")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "8847168101:AAFiDBNKguHNm6OgzVwR0X9IX6VC9wYr4yk")
 GROQ_KEY = os.environ.get("GROQ_KEY", "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")
 
 client = Groq(api_key=GROQ_KEY)
